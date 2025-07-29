@@ -1,0 +1,10 @@
+^C:\CODE\C++_CODE\BLOCKCHAIN_SYSTEM\BUILD\CMAKEFILES\A32F212E5AAF20246EA6C656614B8242\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/CODE/c++_code/Blockchain_System -BC:/CODE/c++_code/Blockchain_System/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/CODE/c++_code/Blockchain_System/build/BLOCKCHAIN_SYSTEM.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
