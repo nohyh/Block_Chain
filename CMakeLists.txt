@@ -18,6 +18,7 @@ add_executable(
     .src/Hash.cpp
     .src/main.cpp
 )
+target_include_directories(BLOCKCHAIN_SYSTEM PRIVATE .src)
 
 target_link_libraries(
     BLOCKCHAIN_SYSTEM
