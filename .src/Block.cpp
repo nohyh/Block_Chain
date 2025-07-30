@@ -2,7 +2,6 @@
 #include<sstream>
 #include<algorithm>
 #include <string>
-#include<openssl/sha.h>
 #include"Hash.h"
 #include "Block.h"
 #include"Transform.h"
