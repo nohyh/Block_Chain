@@ -2,7 +2,7 @@
 #include "BlockChain.h"
 #include <ctime>
 std::string Miner::calculate_merkel_root(std::vector<Transaction> mempool){
-    //明天再写
+    
 };
 
 Block Miner::create_block(){
@@ -18,5 +18,5 @@ Block Miner::create_block(){
 }
 
 Block Miner::mine(){
-    //实现挖矿逻辑，返回上链的区块
+    
 }
