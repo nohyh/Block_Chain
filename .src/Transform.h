@@ -12,4 +12,5 @@ std::string convert_16_2(const std::string&hash);
 
 std::string convert_2_16(const std::string&data);
 
+bool hex_verify(const std::string &address);
 #endif
