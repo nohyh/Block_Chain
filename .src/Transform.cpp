@@ -34,5 +34,13 @@ std::string convert_2_16(const std::string&data){
     return result.str();
 }
 bool hex_verify(const std::string &address){
-    
+    for(char ch:address){
+        if((ch>='0'&&ch<='9')||(ch>='a'&&ch<='f')||ch>='A'&&ch<='F'){
+            continue;
+        }
+        else{
+            return false;
+        }
+    }
+    return true;
 }//检测字符串是不是全是16进制数
