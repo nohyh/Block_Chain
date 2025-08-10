@@ -173,6 +173,7 @@ Transaction User::transfer(const std::string &address,const uint64_t &amount)con
         input.signature =signature;
         input.public_key=this->public_key;
     }
-    return Transaction(inputs,outputs);
-
+    Transaction new_deal =Transaction(inputs,outputs);
+    blockchain_ref.Transaction_pool.push_back(new_deal);
+    return new_deal;
 };

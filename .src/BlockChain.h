@@ -3,7 +3,7 @@
 
 #include<Block.h>
 #include <unordered_map>
-
+#include<Miner.h>
 class UTXO{
 public:
     uint64_t amount;
@@ -19,10 +19,11 @@ public:
 class BlockChain{
 public:
     std::unordered_map<std::string,UTXO> utxo_set;
+    std::vector<Transaction> Transaction_pool;
     std::vector<Block> blocks;
     bool verify_block(const Block& block_to_verify)const;//检测矿工提交的块是否合格
     void add_block(const Block &new_block);
-    BlockChain();//创建创世区块并开始进行模拟
+    BlockChain(const std::string creator_address);//创建创世区块并开始进行模拟
     
     
 };
