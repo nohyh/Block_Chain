@@ -4,6 +4,7 @@
 #include<Block.h>
 #include <unordered_map>
 #include<Miner.h>
+#include<unordered_set>
 class UTXO{
 public:
     uint64_t amount;

@@ -29,5 +29,5 @@ private:
     std::string sign(const std::string &hash_to_sign) const;
 };
 
-std::string serialize_2(std::vector<Input> &inputs,std::vector<Output> &outputs);//对之前的serialize()略加修改即可
+std::string serialize_2(const std::vector<Input> &inputs,const std::vector<Output> &outputs);//对之前的serialize()略加修改即可
 #endif

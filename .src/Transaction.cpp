@@ -4,7 +4,7 @@ Transaction::Transaction(std::vector<Input> inputs,std::vector<Output> outputs):
 };
 
 
-std::string Transaction::serialize() const{
+std::string Transaction::serialize() const {
     std::stringstream ss;
     size_t inputs_count = this->inputs.size();
     ss.write(reinterpret_cast<const char*>(&inputs_count), sizeof(inputs_count));

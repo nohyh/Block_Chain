@@ -7,5 +7,6 @@ int main() {
     struct KeyPair my_keys =generate_keys();
     BlockChain blockchain = BlockChain(my_keys.wallet_address_hex);
     Miner nohyh =Miner(my_keys.wallet_address_hex,my_keys.private_key_bin,my_keys.public_key_bin,blockchain);
+    
     return 0;
 }

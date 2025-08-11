@@ -13,7 +13,7 @@ struct Output{
 };
 struct Input{
     std::string txid;
-    std::string index;
+    int index;
     std::string signature;
     std::string public_key;
 };

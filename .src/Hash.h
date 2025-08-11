@@ -14,4 +14,10 @@ struct KeyPair {
 
 KeyPair generate_keys();
 
+std::string public_key_to_address(const std::string& public_key_bin);
+
+bool verify_signature(const std::string& public_key_bin, 
+                      const std::string& signature_der, 
+                      const std::string& hash_to_sign);
+
 #endif // HASH_H

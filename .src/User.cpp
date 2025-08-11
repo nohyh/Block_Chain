@@ -102,7 +102,7 @@ std::string User::sign(const std::string& hash_to_sign) const {
     return final_signature;
 }
 
-std::string serialize_2(std::vector<Input> &inputs,std::vector<Output> &outputs){
+std::string serialize_2(const std::vector<Input> &inputs,const std::vector<Output> &outputs){
     std::stringstream ss;
     size_t inputs_count =inputs.size();
     ss.write(reinterpret_cast<const char*>(&inputs_count), sizeof(inputs_count));
