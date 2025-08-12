@@ -25,6 +25,7 @@ public:
     bool verify_block(const Block& block_to_verify)const;//检测矿工提交的块是否合格
     void add_block(const Block &new_block);
     BlockChain(const std::string creator_address);//创建创世区块并开始进行模拟
+    void update_transaction_pool(std::vector<Transaction>& pool,const Block& new_block);
     
     
 };

@@ -2,6 +2,21 @@
 #include"Miner.h"
 #include"Transaction.h"
 #include"Hash.h"
+void update_transaction_pool(std::vector<Transaction>& pool, const Block& new_block) {
+    if (pool.empty()) {
+        return;
+    }
+    std::unordered_set<std::string> confirmed_txids;
+    for (const auto& tr : new_block.transactions) {
+        confirmed_txids.insert(tr.txid);
+    }
+    auto new_end = std::remove_if(pool.begin(), pool.end(), 
+        [&](const Transaction& tx) {
+            return confirmed_txids.count(tx.txid) > 0;
+        }
+    );
+    pool.erase(new_end, pool.end());
+}
 bool BlockChain::verify_block(const Block& block_to_verify)const{
     int n=0;
     std::unordered_set<std::string> spent_utxo;
@@ -52,8 +67,34 @@ bool BlockChain::verify_block(const Block& block_to_verify)const{
     return true;
 };
 
-void add_block(const Block &new_block){
-
+void BlockChain::add_block(const Block &new_block){
+    //在数组中加入这个块，意味着上链
+    this->blocks.push_back(new_block);
+    //更新UTXO集合,删除老的UTX0,生成新的UTXO
+    for(int i=0;i<new_block.transactions.size();i++){
+        //处理首笔交易
+        if(i==0){
+            for(auto output:new_block.transactions[i].outputs){
+                UTXO new_utxo =UTXO(output.amount,0,output.address,new_block.transactions[i].txid);
+                utxo_set[new_utxo.get_utxo_key()]=new_utxo;
+            }
+        }
+        //正常交易
+        else{
+            for(auto input: new_block.transactions[i].inputs){
+                std::string key =input.txid + ":" + std::to_string(input.index);
+                utxo_set.erase(key);
+            }
+            int j=0;
+             for(auto output:new_block.transactions[i].outputs){
+                UTXO new_utxo =UTXO(output.amount,j,output.address,new_block.transactions[i].txid);
+                utxo_set[new_utxo.get_utxo_key()]=new_utxo;
+                j++;
+            }
+        }
+    }
+    //将区块内交易从transaciton_pool中删除
+    update_transaction_pool(Transaction_pool,new_block);
 };
 
 
