@@ -33,7 +33,3 @@ Block Miner::create_block(){
     return new_block;
 }
 
-Block Miner::mine(){
-  
-    
-}
