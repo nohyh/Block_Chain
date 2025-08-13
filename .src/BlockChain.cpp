@@ -93,8 +93,6 @@ void BlockChain::add_block(const Block &new_block){
             }
         }
     }
-    //将区块内交易从transaciton_pool中删除
-    update_transaction_pool(Transaction_pool,new_block);
 };
 
 

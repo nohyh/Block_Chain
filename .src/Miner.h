@@ -2,6 +2,8 @@
 #define MINER_H
 
 #include"User.h"
+#include<mutex>
+#include<thread>
 
 class BlockChain;
 

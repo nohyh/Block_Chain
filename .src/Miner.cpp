@@ -34,5 +34,6 @@ Block Miner::create_block(){
 }
 
 Block Miner::mine(){
+  
     
 }
