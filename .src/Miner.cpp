@@ -33,3 +33,25 @@ Block Miner::create_block(){
     return new_block;
 }
 
+Transaction Miner::create_coinbase(){
+    std::string zero_hash;
+    for(int i=0;i<64;i++){
+        zero_hash += "0";
+    }
+    std::vector<Input>inputs;
+    std::vector<Output> outputs;
+    outputs.push_back(Output{50,this->wallet_address});
+    inputs.push_back(Input{zero_hash,-1,"My Mini Blockchain Genesis",""});
+    Transaction CoinBase =Transaction(inputs,outputs);
+    return CoinBase;
+}
+
+ bool verify_transaction(const Transaction &tx) {
+    std::string hash_to_sign =sha256(serialize_2(tx.inputs,tx.outputs));
+    if(!verify_signature(tx.inputs[0].public_key,tx.inputs[0].signature,hash_to_sign)){
+        return false;
+    }
+    else{
+        return true;
+    }
+ }
