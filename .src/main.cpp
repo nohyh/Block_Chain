@@ -16,7 +16,7 @@ int main() {
     struct KeyPair my_keys =generate_keys();
     BlockChain blockchain = BlockChain(my_keys.wallet_address_hex);
     //将接受了奖励的地址和nohyh绑定
-    Miner nohyh =Miner(my_keys.wallet_address_hex,my_keys.private_key_bin,my_keys.public_key_bin,blockchain);
+    User nohyh =User(my_keys.wallet_address_hex,my_keys.private_key_bin,my_keys.public_key_bin,blockchain);
    //创建其他矿工
     std::vector<Miner> miners;
     std::vector<Miningworker> workers;
@@ -28,7 +28,7 @@ int main() {
     }
     //创建工作矿工并加入工作矿工数组并开始执行
     for(auto &miner:miners){
-        workers.emplace_back(miner,blockchain,Transaction_pool,pool_mtx,chain_mtx,cv,cv_mtx,block_found);
+        workers.emplace_back(miner,blockchain,Transaction_pool,pool_mtx,chain_mtx,stop_flag,cv,cv_mtx,block_found);
     }
     for(auto &worker :workers){
         thread_miners.emplace_back([worker_copy = worker]()mutable{
@@ -37,24 +37,54 @@ int main() {
     }
     //同样的，创建用户并开始交易：
     std::vector<User> users;
-    for(int i=0;i=50;i++){
+    users.push_back(nohyh);
+    for(int i=0;i<49;i++){
         KeyPair keys =generate_keys();
         users.emplace_back(keys.wallet_address_hex,keys.private_key_bin,keys.public_key_bin,blockchain);
     }
-    //一个线程用来是产生自动交易逻辑
-    std::thread(auto_trade());
+    std::thread trading_thread(auto_trade, std::ref(users), std::ref(Transaction_pool), std::ref(pool_mtx), std::ref(blockchain));
+    //等待线程完成后再继续（实际上不会继续了）
+    trading_thread.join();
+    for(auto &t:thread_miners){
+        t.join();
+    }
+
 }
 
 void auto_trade(std::vector<User>& users,std::vector<Transaction>& transaction_pool,std::mutex& pool_mutex,BlockChain& blockchain){
     std::random_device rd;  
     std::mt19937 gen(rd()); 
+    std::vector<int> indices ; //此为有储存有钱用户的下标的数组
+    indices.push_back(0);
+    
     while(true){
-        std::uniform_int_distribution<> user_dist(0,users.size()-1);
-        int sender_index =user_dist(gen);
+        //首先从有钱的人中间找到付款方
+        std::uniform_int_distribution<> dist(0,indices.size()-1);
+        int sender_index =indices[dist(gen)];
         User& sender = users[sender_index];
-        uint64_t sender_balance = blockchain.get_balance(sender.wallet_address);
-        if (sender_balance == 0) {
-            continue;
+        uint64_t balance=blockchain.get_balance(sender.wallet_address);
+        if(balance==0) continue;
+        //然后找到收款方
+        std::uniform_int_distribution<> receiver_dist(0,users.size()-1);
+        int receiver_index =receiver_dist(gen);
+        User &receiver =users[receiver_index];
+        if(receiver.wallet_address==sender.wallet_address) continue;
+        //确认金额
+        std::uniform_int_distribution<> amount_dist(1,balance);
+        int amount =amount_dist(gen);
+        //开始转账
+        try {
+            Transaction tr = sender.transfer(receiver.wallet_address, amount);
+            {
+            std::lock_guard<std::mutex> lock(pool_mutex);
+            transaction_pool.push_back(tr);
+            }
+            if (std::find(indices.begin(), indices.end(), receiver_index) == indices.end()) {
+            indices.push_back(receiver_index);
+            }
         }
+        catch (const std::exception &e) {
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 }

@@ -118,3 +118,13 @@ BlockChain::BlockChain(const std::string creator_address){
     std::string key =new_utxo.get_utxo_key();
     utxo_set[key]=new_utxo;
 };
+
+uint64_t BlockChain::get_balance(const std::string &address)const{
+    uint64_t deposit=0;
+    for(auto &utxo:utxo_set){
+        if(utxo.second.address==address){
+            deposit+=utxo.second.amount;
+        }
+    }
+    return deposit;
+}

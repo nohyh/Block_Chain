@@ -44,9 +44,10 @@ void Miningworker::run() {
     //下一步，正式开始进行工作量证明
     // 收到提醒前就不会停下
     bool found = false;
+    std::string target(new_block.difficulty, '0');
     while (!stop_flag_ref) {
       std::string hash = new_block.calculate_hash();
-      if (hash.substr(0, new_block.difficulty) == "0000" && !stop_flag_ref) {
+      if (hash.substr(0, new_block.difficulty) == target && !stop_flag_ref) {
         found = true;
         break;
       }
