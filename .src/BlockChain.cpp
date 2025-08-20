@@ -67,6 +67,17 @@ bool BlockChain::verify_block(const Block& block_to_verify)const{
     return true;
 };
 
+std::string get_time(){
+
+}
+void print_block(const Block &new_block){
+    std::cout<<"===========Block============="<<std::endl;
+    std::cout<<"Time= "<<std::format("{:%Y-%m-%d %H:%M:%S}", std::chrono::system_clock::now())<<std::endl;
+    std::cout<<"Height= "<<new_block.block_height<<std::endl;
+    std::cout<<"Hash= "<<new_block.calculate_hash()<<std::endl;
+    std::cout<<"Nonce= "<<new_block.nonce<<std::endl;
+    std::cout<<"=============================="<<std::endl;
+}
 void BlockChain::add_block(const Block &new_block){
     //在数组中加入这个块，意味着上链
     this->blocks.push_back(new_block);
@@ -93,6 +104,7 @@ void BlockChain::add_block(const Block &new_block){
             }
         }
     }
+    print_block(new_block);
 };
 
 

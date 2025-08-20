@@ -1,10 +1,12 @@
 #ifndef BLOCKCHAIN_H
 #define BLOCKCHAIN_H
-
+#include<iostream>
 #include<Block.h>
 #include <unordered_map>
 #include<Miner.h>
 #include<unordered_set>
+#include <format>
+const uint64_t NOCOIN =1000000000;
 class UTXO{
 public:
     uint64_t amount;
@@ -26,9 +28,9 @@ public:
     BlockChain(const std::string creator_address);//创建创世区块并开始进行模拟
     void update_transaction_pool(std::vector<Transaction>& pool,const Block& new_block);
     uint64_t get_balance(const std::string &address) const;
-    
-    
+    void print_block(const Block&new_block)const;
 };
 
+std::string get_time();
 
 #endif 

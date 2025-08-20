@@ -85,6 +85,7 @@ void auto_trade(std::vector<User>& users,std::vector<Transaction>& transaction_p
         }
         catch (const std::exception &e) {
         }
+        std::cout<<sender.wallet_address<<"Transfer "<<amount/NOCOIN<<"To "<<receiver.wallet_address<<std::endl;
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 }
