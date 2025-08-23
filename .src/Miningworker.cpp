@@ -24,46 +24,72 @@ Miningworker::Miningworker(Miner& miner,
 {}
 
 void Miningworker::run() {
-  while (true) {
-    miner_ref.mempool.push_back(this->miner_ref.create_coinbase());
-    //将交易信息拉取到自己的mempool中，感觉这部分逻辑还是有点问题，后面再来优化
-    while (miner_ref.mempool.size() < 9) {
-      std::unique_lock<std::mutex> lock(pool_mutex_ref);
-      if (!transaction_pool_ref.empty()) {
-        Transaction tr = transaction_pool_ref.back();
-        if (this->miner_ref.verify_transaction(tr)) {
-          miner_ref.mempool.push_back(tr);
+    while (true) {
+        miner_ref.mempool.clear();
+        miner_ref.mempool.push_back(miner_ref.create_coinbase());
+
+        {
+            std::unique_lock<std::mutex> lock(pool_mutex_ref);
+            cv_ref.wait(lock, [this] { return transaction_pool_ref.size() >= 8; });
+
+            // Take a snapshot of the transactions to avoid holding the lock for too long
+            std::vector<Transaction> current_pool_snapshot = transaction_pool_ref;
+            lock.unlock();
+
+            for (const auto& tx : current_pool_snapshot) {
+                if (miner_ref.mempool.size() >= 9) break;
+                // Simple check to avoid duplicates in the mempool
+                bool found = false;
+                for (const auto& mem_tx : miner_ref.mempool) {
+                    if (mem_tx.txid == tx.txid) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found && miner_ref.verify_transaction(tx)) {
+                    miner_ref.mempool.push_back(tx);
+                }
+            }
         }
-      }
-      //考虑到一秒将会生成一笔交易，所以一秒后肯定至少有一笔交易可以获取，没想到太好的办法
-      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+        Block new_block = miner_ref.create_block();
+        size_t initial_chain_height = 0;
+        {
+            std::lock_guard<std::mutex> chain_lock(chain_mutex_ref);
+            initial_chain_height = blockchain_ref.blocks.size();
+        }
+
+        std::string target(new_block.difficulty, '0');
+        bool found_by_me = false;
+
+        while (true) {
+            if (new_block.calculate_hash().substr(0, new_block.difficulty) == target) {
+                found_by_me = true;
+                break;
+            }
+
+            new_block.nonce++;
+
+            if (new_block.nonce % 1000 == 0) {
+                std::lock_guard<std::mutex> chain_lock(chain_mutex_ref);
+                if (blockchain_ref.blocks.size() > initial_chain_height) {
+                    break; // Another miner won
+                }
+            }
+        }
+
+        if (found_by_me) {
+            std::lock_guard<std::mutex> lock(chain_mutex_ref);
+            if (blockchain_ref.blocks.size() == initial_chain_height) {
+                if (blockchain_ref.verify_block(new_block)) {
+                    blockchain_ref.add_block(new_block);
+                    {
+                        std::lock_guard<std::mutex> pool_lock(pool_mutex_ref);
+                        blockchain_ref.update_transaction_pool(transaction_pool_ref,new_block);
+                    }
+                    cv_ref.notify_all();
+                }
+            }
+        }
     }
-    //此时mempool已经满了
-    //创建新区块 
-    Block new_block = this->miner_ref.create_block();
-    //下一步，正式开始进行工作量证明
-    // 收到提醒前就不会停下
-    bool found = false;
-    std::string target(new_block.difficulty, '0');
-    while (!stop_flag_ref) {
-      std::string hash = new_block.calculate_hash();
-      if (hash.substr(0, new_block.difficulty) == target && !stop_flag_ref) {
-        found = true;
-        break;
-      }
-      new_block.nonce++;
-    }
-    if (found) {
-      std::scoped_lock lock(chain_mutex_ref,pool_mutex_ref);
-      if (!stop_flag_ref && blockchain_ref.verify_block(new_block)) {
-        blockchain_ref.add_block(new_block);
-        blockchain_ref.update_transaction_pool(this->transaction_pool_ref, new_block);
-        stop_flag_ref = true;
-        //等待一段时间，等所有其他线程都进入下一个循环后再令stop_flag_ref为false
-        std::this_thread::sleep_for(std::chrono::milliseconds(50)); 
-        stop_flag_ref = false;
-      }
-    }
-    miner_ref.mempool.clear();
-  }
 }

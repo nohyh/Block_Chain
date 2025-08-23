@@ -20,8 +20,8 @@ struct Input{
 class Transaction {
 public:
     std::string txid;
-    std::vector<Input> inputs;//即花费的UTXO的信息和证明信息
-    std::vector<Output> outputs;//即消耗的UTXO的去向
+    std::vector<Input> inputs;//spent utxo message
+    std::vector<Output> outputs; //where is utxo go
     Transaction(std::vector<Input>inputs,std::vector<Output> outputs);
 private:
       std::string serialize() const;

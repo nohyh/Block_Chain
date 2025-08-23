@@ -16,6 +16,7 @@ add_executable(
     .src/User.cpp
     .src/Transform.cpp
     .src/Hash.cpp
+    .src/Miningworker.cpp
     .src/main.cpp
 )
 target_include_directories(BLOCKCHAIN_SYSTEM PRIVATE .src)

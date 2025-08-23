@@ -1,18 +1,19 @@
 
 #include "Hash.h"
 #include <openssl/sha.h>
+#include <openssl/ripemd.h>
 #include <sstream>
 #include <iomanip>
-#include <openssl/ec.h>      // 椭圆曲线加密的核心库
-#include <openssl/obj_mac.h> // 包含了曲线的ID (NID_secp256k1)
-#include <openssl/rand.h>  // 用于生成安全的随机数
+#include <openssl/ec.h>      // Core library for elliptic curve cryptography
+#include <openssl/obj_mac.h> // Contains the curve ID (NID_secp256k1)
+#include <openssl/rand.h>  // For generating secure random numbers
 #include <openssl/ecdsa.h>   
-#include <openssl/bn.h>      // 用于大数运算
-#include <memory>            // 用于智能指针 std::unique_ptr
+#include <openssl/bn.h>      // For big number arithmetic
+#include <memory>            // For smart pointers std::unique_ptr
 #include <vector>
 #include <string>
 #include "Transform.h"
-//用来将SHA256返回的无符号数据转化为字符串
+// Used to convert the unsigned char data returned by SHA256 into a string
 std::string sha256(const std::string& data) {
     unsigned char hash_buffer[SHA256_DIGEST_LENGTH];
     SHA256(
@@ -26,40 +27,49 @@ std::string sha256(const std::string& data) {
     );
 }
 
+std::string ripemd160(const std::string& data) {
+    unsigned char hash_buffer[RIPEMD160_DIGEST_LENGTH];
+    RIPEMD160(
+        reinterpret_cast<const unsigned char*>(data.c_str()),
+        data.length(),
+        hash_buffer
+    );
+    return std::string(
+        reinterpret_cast<const char*>(hash_buffer),
+        RIPEMD160_DIGEST_LENGTH
+    );
+}
 
-// --- 这是核心的密钥生成函数 ---
+
+// --- This is the core key generation function ---
 KeyPair generate_keys() {
     auto deleter_ec_key = [](EC_KEY* p) { EC_KEY_free(p); };
     std::unique_ptr<EC_KEY, decltype(deleter_ec_key)> ec_key(EC_KEY_new_by_curve_name(NID_secp256k1), deleter_ec_key);
     if (!ec_key) {
         throw std::runtime_error("Failed to create new EC_KEY.");
     }
-    // --- 1. 生成密钥对 ---
+    // --- 1. Generate key pair ---
     if (EC_KEY_generate_key(ec_key.get()) != 1) {
         throw std::runtime_error("Failed to generate EC key pair.");
     }
 
-    // --- 2. 提取私钥 ---
+    // --- 2. Extract private key ---
     const BIGNUM* private_bn = EC_KEY_get0_private_key(ec_key.get());
     if (!private_bn) {
         throw std::runtime_error("Failed to get private key BIGNUM.");
     }
-    // 将BIGNUM格式的私钥转换为32字节的二进制字符串
-    std::vector<unsigned char> private_key_vec(BN_num_bytes(private_bn));
-    BN_bn2bin(private_bn, private_key_vec.data());
-    // 确保私钥是32字节，不足则在前面补0
-    if (private_key_vec.size() < 32) {
-        private_key_vec.insert(private_key_vec.begin(), 32 - private_key_vec.size(), 0);
-    }
+    // Convert the BIGNUM format private key to a 32-byte binary string
+    std::vector<unsigned char> private_key_vec(32, 0);
+    BN_bn2binpad(private_bn, private_key_vec.data(), private_key_vec.size());
     std::string private_key_bin(private_key_vec.begin(), private_key_vec.end());
 
 
-    // --- 3. 提取公钥 ---
+    // --- 3. Extract public key ---
     const EC_POINT* public_point = EC_KEY_get0_public_key(ec_key.get());
     if (!public_point) {
         throw std::runtime_error("Failed to get public key point.");
     }
-    // 将EC_POINT格式的公钥转换为未压缩的二进制字符串 (通常是65字节，以0x04开头)
+    // Convert the EC_POINT format public key to an uncompressed binary string (usually 65 bytes, starting with 0x04)
     auto deleter_bn_ctx = [](BN_CTX* p) { BN_CTX_free(p); };
     std::unique_ptr<BN_CTX, decltype(deleter_bn_ctx)> ctx(BN_CTX_new(), deleter_bn_ctx);
     if (!ctx) {
@@ -70,50 +80,62 @@ KeyPair generate_keys() {
     EC_POINT_point2oct(EC_KEY_get0_group(ec_key.get()), public_point, POINT_CONVERSION_UNCOMPRESSED, public_key_vec.data(), pubkey_len, ctx.get());
     std::string public_key_bin(public_key_vec.begin(), public_key_vec.end());
 
-    // --- 4. 生成钱包地址 ---
-    // 简化版地址生成：直接对公钥进行哈希，然后转为十六进制
-    // (真实比特币地址会更复杂：SHA256 -> RIPEMD160 -> Base58Check编码)
-    std::string address_hash_bin = sha256(public_key_bin);
-    std::string wallet_address_hex = convert_2_16(address_hash_bin);
-    return {private_key_bin, public_key_bin, wallet_address_hex};
+    // --- 4. Generate wallet address ---
+    std::string wallet_address = public_key_to_address(public_key_bin);
+    return KeyPair{private_key_bin, public_key_bin, wallet_address};
 }
 
 
 std::string public_key_to_address(const std::string& public_key_bin) {
-    std::string address_hash_bin = sha256(public_key_bin);
-    std::string wallet_address_hex = convert_2_16(address_hash_bin);
-    return wallet_address_hex;
+    // Step 1 & 2: SHA-256 then RIPEMD-160
+    std::string hash1 = sha256(public_key_bin);
+    std::string hash2 = ripemd160(hash1);
+
+    // Step 3: Add version byte (0x00 for mainnet)
+    char version = 0x00;
+    std::string hash3 = version + hash2;
+
+    // Step 4 & 5: Double SHA-256 for checksum
+    std::string hash4 = sha256(hash3);
+    std::string hash5 = sha256(hash4);
+    std::string checksum = hash5.substr(0, 4);
+
+    // Step 6: Append checksum
+    std::string hash6 = hash3 + checksum;
+
+    // Step 7: Base58Check encode
+    return base58_encode(hash6);
 }
 
 bool verify_signature(const std::string& public_key_bin, 
                       const std::string& signature_der, 
                       const std::string& hash_to_sign) {
 
-    // --- 步骤 1: 将二进制的公钥加载到OpenSSL的EC_KEY结构中 ---
+    // --- Step 1: Load the binary public key into OpenSSL's EC_KEY structure ---
     
-    // 1a. 创建一个空的EC_KEY对象，并指定曲线
+    // 1a. Create an empty EC_KEY object and specify the curve
     auto deleter_ec_key = [](EC_KEY* p) { EC_KEY_free(p); };
     std::unique_ptr<EC_KEY, decltype(deleter_ec_key)> ec_key(EC_KEY_new_by_curve_name(NID_secp256k1), deleter_ec_key);
     if (!ec_key) {
-        // 无法创建密钥对象，直接返回失败
+        // Failed to create key object, return false directly
         return false;
     }
 
-    // 1b. 将二进制公钥字符串转换为OpenSSL内部的EC_POINT格式
+    // 1b. Convert the binary public key string to OpenSSL's internal EC_POINT format
     const unsigned char* pub_key_ptr = reinterpret_cast<const unsigned char*>(public_key_bin.c_str());
     EC_KEY* raw_key = ec_key.get();
     if (o2i_ECPublicKey(&raw_key, &pub_key_ptr, public_key_bin.length()) == NULL) {
-        // 转换失败，说明公钥格式不正确
+        // Conversion failed, indicating the public key format is incorrect
         return false;
     }
 
-    // --- 步骤 2: 执行验证 ---
+    // --- Step 2: Perform verification ---
     
-    // ECDSA_do_verify 是OpenSSL的核心验证函数
-    // 它会用 ec_key 中的公钥，来验证 signature_der 是否是对 hash_to_sign 的有效签名
-    // 返回值: 1 = 验证成功, 0 = 验证失败, -1 = 出现错误
+    // ECDSA_do_verify is the core verification function of OpenSSL
+    // It uses the public key in ec_key to verify if signature_der is a valid signature for hash_to_sign
+    // Return value: 1 = verification successful, 0 = verification failed, -1 = error occurred
     int result = ECDSA_verify(
-        0, // type, 默认为0
+        0, // type, defaults to 0
         reinterpret_cast<const unsigned char*>(hash_to_sign.c_str()),
         hash_to_sign.length(),
         reinterpret_cast<const unsigned char*>(signature_der.c_str()),
@@ -121,7 +143,7 @@ bool verify_signature(const std::string& public_key_bin,
         ec_key.get()
     );
 
-    // --- 步骤 3: 返回最终结果 ---
-    // 只有当返回值明确为1时，才代表签名有效
+    // --- Step 3: Return the final result ---
+    // Only a return value of 1 represents a valid signature
     return result == 1;
 }

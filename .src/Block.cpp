@@ -15,8 +15,8 @@ Block::Block(size_t block_height,long long stamp,std::string prehash,std::string
     this->nonce = nonce; 
     this->transactions = transactions;
 };
-//前块哈希 -> 默克尔根 -> 时间戳 -> 难度 -> Nonce
-//时间戳, 难度, Nonce 为整数，pre_hash和merkel_root为16进制字符串
+// Previous Block Hash -> Merkle Root -> Timestamp -> Difficulty -> Nonce
+// Timestamp, Difficulty, Nonce are integers; pre_hash and merkel_root are hexadecimal strings
 
 std::string Block::calculate_hash()const{
     std::stringstream ss ;

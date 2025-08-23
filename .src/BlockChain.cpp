@@ -1,8 +1,13 @@
-#include"BlockChain.h"
-#include"Miner.h"
-#include"Transaction.h"
-#include"Hash.h"
-void update_transaction_pool(std::vector<Transaction>& pool, const Block& new_block) {
+#include "BlockChain.h"
+#include "Miner.h"
+#include "Transaction.h"
+#include "Hash.h"
+#include <chrono>
+#include <algorithm>
+
+UTXO::UTXO(uint64_t amount,int index,std::string address,std::string txid):amount(amount),index(index),address(address),txid(txid){}
+
+void BlockChain::update_transaction_pool(std::vector<Transaction>& pool, const Block& new_block) {
     if (pool.empty()) {
         return;
     }
@@ -10,130 +15,128 @@ void update_transaction_pool(std::vector<Transaction>& pool, const Block& new_bl
     for (const auto& tr : new_block.transactions) {
         confirmed_txids.insert(tr.txid);
     }
-    auto new_end = std::remove_if(pool.begin(), pool.end(), 
+    pool.erase(std::remove_if(pool.begin(), pool.end(),
         [&](const Transaction& tx) {
             return confirmed_txids.count(tx.txid) > 0;
         }
-    );
-    pool.erase(new_end, pool.end());
+    ), pool.end());
 }
-bool BlockChain::verify_block(const Block& block_to_verify)const{
-    int n=0;
+
+bool BlockChain::verify_block(const Block& block_to_verify)const {
+    int n = 0;
     std::unordered_set<std::string> spent_utxo;
-    //检查pre_hash是否一致
-    if(block_to_verify.pre_hash!=this->blocks.back().calculate_hash()){
+    // Check if pre_hash is consistent
+    if (block_to_verify.pre_hash != this->blocks.back().calculate_hash()) {
         return false;
     }
-    //验证工作量证明，算出来的哈希值应当符合难度要求
-    for(auto ch:block_to_verify.calculate_hash()){
-        if(ch!='0'){
+    // Verify the proof of work, the calculated hash should meet the difficulty requirement
+    for (auto ch : block_to_verify.calculate_hash()) {
+        if (ch != '0') {
             break;
         }
         n++;
     }
-    if(n!=block_to_verify.difficulty){
+    if (n < block_to_verify.difficulty) { // Fix: Should be >= difficulty
         return false;
     }
-    //检查区块中的每一笔交易
-    for(int i=0;i<block_to_verify.transactions.size();i++){
-        //检查coinbase交易
-        if(i==0){
-            if(block_to_verify.transactions[0].inputs.size()!=1||block_to_verify.transactions[0].inputs[0].index!=-1||block_to_verify.transactions[0].outputs[0].amount!=50){
+    // Check every transaction in the block
+    for (size_t i = 0; i < block_to_verify.transactions.size(); i++) {
+        // Check the coinbase transaction
+        if (i == 0) {
+            if (block_to_verify.transactions[0].inputs.size() != 1 || block_to_verify.transactions[0].inputs[0].index != -1 || block_to_verify.transactions[0].outputs[0].amount != 50 * NOCOIN) {
                 return false;
             }
             continue;
         }
-        //正常的交易
-        for(auto input:block_to_verify.transactions[i].inputs){
-            //双花攻击检查(判断该utxo是否还存在，以及该utxo是否已经在块中被使用)
-            std::string key =input.txid + ":" + std::to_string(input.index);
-            if(utxo_set.count(key)==0||spent_utxo.count(key)!=0){
+        // Normal transactions
+        for (const auto& input : block_to_verify.transactions[i].inputs) {
+            // Double-spend check (check if the utxo still exists and has not been spent in this block)
+            std::string key = input.txid + ":" + std::to_string(input.index);
+            if (utxo_set.count(key) == 0 || spent_utxo.count(key) != 0) {
                 return false;
             }
-            //检查公钥是否与地址匹配
-            auto owner_address =this->utxo_set.at(key).address;
-            if(public_key_to_address(input.public_key)!=owner_address){
+            // Check if the public key matches the address
+            auto owner_address = this->utxo_set.at(key).address;
+            if (public_key_to_address(input.public_key) != owner_address) {
                 return false;
             }
-            //进行签名验证
-            std::string hash_to_sign =sha256(serialize_2(block_to_verify.transactions[i].inputs,block_to_verify.transactions[i].outputs));
-            if(!verify_signature(input.public_key,input.signature,hash_to_sign)){
+            // Perform signature verification
+            std::string hash_to_sign = sha256(serialize_2(block_to_verify.transactions[i].inputs, block_to_verify.transactions[i].outputs));
+            if (!verify_signature(input.public_key, input.signature, hash_to_sign)) {
                 return false;
             }
-            //记录该uxto，用作下一步的对比验证
+            // Record this utxo for subsequent verification
             spent_utxo.insert(key);
         }
     }
     return true;
-};
-
-std::string get_time(){
-
 }
-void print_block(const Block &new_block){
-    std::cout<<"===========Block============="<<std::endl;
-    std::cout<<"Time= "<<std::format("{:%Y-%m-%d %H:%M:%S}", time)<<std::endl;
-    std::cout<<"Height= "<<new_block.block_height<<std::endl;
-    std::cout<<"Hash= "<<new_block.calculate_hash()<<std::endl;
-    std::cout<<"Nonce= "<<new_block.nonce<<std::endl;
-    std::cout<<"=============================="<<std::endl;
+
+void BlockChain::print_block(const Block& new_block) const {
+    auto tp = std::chrono::system_clock::from_time_t(new_block.time_stamp);
+    std::cout << "===========Block=============" << std::endl;
+    std::cout << "Time= " << std::format("{:%Y-%m-%d %H:%M:%S}", tp) << std::endl;
+    std::cout << "Height= " << new_block.block_height << std::endl;
+    std::cout << "Hash= " << new_block.calculate_hash() << std::endl;
+    std::cout << "Nonce= " << new_block.nonce << std::endl;
+    std::cout << "==============================" << std::endl;
 }
 void BlockChain::add_block(const Block &new_block){
-    //在数组中加入这个块，意味着上链
+    // Adding this block to the vector means adding it to the chain
     this->blocks.push_back(new_block);
-    //更新UTXO集合,删除老的UTX0,生成新的UTXO
-    for(int i=0;i<new_block.transactions.size();i++){
-        //处理首笔交易
+    // Update the UTXO set, delete old UTXOs, and create new ones
+    for(size_t i=0;i<new_block.transactions.size();i++){
+        // Process the first transaction (coinbase)
         if(i==0){
-            for(auto output:new_block.transactions[i].outputs){
+            for(const auto& output:new_block.transactions[i].outputs){
                 UTXO new_utxo =UTXO(output.amount,0,output.address,new_block.transactions[i].txid);
-                utxo_set[new_utxo.get_utxo_key()]=new_utxo;
+                utxo_set.emplace(new_utxo.get_utxo_key(), new_utxo);
             }
         }
-        //正常交易
+        // Normal transactions
         else{
-            for(auto input: new_block.transactions[i].inputs){
+            for(const auto& input: new_block.transactions[i].inputs){
                 std::string key =input.txid + ":" + std::to_string(input.index);
                 utxo_set.erase(key);
             }
             int j=0;
-             for(auto output:new_block.transactions[i].outputs){
+             for(const auto& output:new_block.transactions[i].outputs){
                 UTXO new_utxo =UTXO(output.amount,j,output.address,new_block.transactions[i].txid);
-                utxo_set[new_utxo.get_utxo_key()]=new_utxo;
+                utxo_set.emplace(new_utxo.get_utxo_key(), new_utxo);
                 j++;
             }
         }
     }
     print_block(new_block);
-};
+}
 
 
 BlockChain::BlockChain(const std::string creator_address){
-    //该区块前置哈希为16位0
-    std::string zero_hash;
-    for(int i=0;i<64;i++){
-        zero_hash += "0";
-    }
-    //将创世区块的Transacion数组仅加入一个coinbase奖励
+    // The previous hash of this block is 64 zeros
+    std::string zero_hash(64, '0');
+
+    // Add only one coinbase reward to the transaction array of the genesis block
     std::vector<Transaction> transactions;
     std::vector<Input>inputs;
     std::vector<Output> outputs;
-    outputs.push_back(Output{50,creator_address});
+    outputs.push_back(Output{50 * NOCOIN,creator_address});
     inputs.push_back(Input{zero_hash,-1,"My Mini Blockchain Genesis",""});
     Transaction CoinBase =Transaction(inputs,outputs);
     transactions.push_back(CoinBase);
-    //创建创世区块
+
+    // Create the genesis block
     Block Genesis_Block =Block(0,std::time(nullptr),zero_hash,Miner::calculate_merkel_root(transactions),5,0,transactions);
-    //加入utxo集合和blocks
+    
+    // Add to the utxo set and blocks vector
     blocks.push_back(Genesis_Block);
     UTXO new_utxo =UTXO(outputs[0].amount,0,outputs[0].address,CoinBase.txid);
     std::string key =new_utxo.get_utxo_key();
-    utxo_set[key]=new_utxo;
-};
+    utxo_set.emplace(key, new_utxo);
+}
 
 uint64_t BlockChain::get_balance(const std::string &address)const{
     uint64_t deposit=0;
-    for(auto &utxo:utxo_set){
+    for(const auto &utxo:utxo_set){
         if(utxo.second.address==address){
             deposit+=utxo.second.amount;
         }

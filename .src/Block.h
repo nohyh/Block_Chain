@@ -16,7 +16,7 @@ public:
     uint32_t difficulty;
     uint32_t nonce;
     std::vector<Transaction> transactions;
-    Block(size_t block_height,long long stamp,std::string prehash,std::string merkel_root,uint32_t difficulty,uint32_t nouce,std::vector<Transaction> transactions);//应该在数组满后进行对象的初始化，需要加入已知的参数
+    Block(size_t block_height,long long stamp,std::string prehash,std::string merkel_root,uint32_t difficulty,uint32_t nouce,std::vector<Transaction> transactions);
     std::string calculate_hash()const;
 };
 #endif

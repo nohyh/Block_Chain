@@ -1,105 +1,74 @@
 #include "User.h"
 #include "Hash.h"
 #include"Transaction.h"
-    // 用于大数运算 (BIGNUM)
-std::string User::sign(const std::string& hash_to_sign) const {
-    // --- 步骤 1: 将我们的私钥加载到OpenSSL的EC_KEY结构中 ---
+#include <vector>
 
-    // 1a. 创建一个 BIGNUM 对象来存储我们的二进制私钥
-    BIGNUM* bn_private_key = BN_bin2bn(
-        reinterpret_cast<const unsigned char*>(this->private_key.c_str()),
-        this->private_key.length(),
-        nullptr // BIGNUM对象由函数创建并返回
+// For big number arithmetic (BIGNUM)
+std::string User::sign(const std::string& hash_to_sign) const {
+    // --- Setup custom deleters for OpenSSL objects ---
+    auto bn_deleter = [](BIGNUM* p) { BN_free(p); };
+    auto ec_key_deleter = [](EC_KEY* p) { EC_KEY_free(p); };
+    auto ec_point_deleter = [](EC_POINT* p) { EC_POINT_free(p); };
+    auto ecdsa_sig_deleter = [](ECDSA_SIG* p) { ECDSA_SIG_free(p); };
+
+    // --- Step 1: Load our private key into OpenSSL's EC_KEY structure (RAII version) ---
+    std::unique_ptr<BIGNUM, decltype(bn_deleter)> bn_private_key(
+        BN_bin2bn(reinterpret_cast<const unsigned char*>(this->private_key.c_str()), this->private_key.length(), nullptr),
+        bn_deleter
     );
-    if (bn_private_key == nullptr) {
+    if (!bn_private_key) {
         throw std::runtime_error("Failed to convert private key to BIGNUM.");
     }
 
-    // 1b. 创建一个 EC_KEY 对象，并指定使用 secp256k1 曲线
-    EC_KEY* ec_key = EC_KEY_new_by_curve_name(NID_secp256k1);
-    if (ec_key == nullptr) {
-        BN_free(bn_private_key); // 清理内存
+    std::unique_ptr<EC_KEY, decltype(ec_key_deleter)> ec_key(
+        EC_KEY_new_by_curve_name(NID_secp256k1),
+        ec_key_deleter
+    );
+    if (!ec_key) {
         throw std::runtime_error("Failed to create new EC_KEY.");
     }
 
-    // 1c. 将 BIGNUM 形式的私钥设置到 EC_KEY 对象中
-    if (EC_KEY_set_private_key(ec_key, bn_private_key) != 1) {
-        BN_free(bn_private_key);
-        EC_KEY_free(ec_key);
+    if (EC_KEY_set_private_key(ec_key.get(), bn_private_key.get()) != 1) {
         throw std::runtime_error("Failed to set private key.");
     }
 
-    // 1d. 让OpenSSL根据私钥自动计算出对应的公钥
-    // 这是必需的，因为签名算法内部需要用到曲线参数，这些参数在设置公钥时被完全初始化
-    const EC_GROUP* group = EC_KEY_get0_group(ec_key);
-    EC_POINT* pub_point = EC_POINT_new(group);
-    if (EC_POINT_mul(group, pub_point, bn_private_key, nullptr, nullptr, nullptr) != 1) {
-        BN_free(bn_private_key);
-        EC_KEY_free(ec_key);
-        EC_POINT_free(pub_point);
+    const EC_GROUP* group = EC_KEY_get0_group(ec_key.get());
+    std::unique_ptr<EC_POINT, decltype(ec_point_deleter)> pub_point(EC_POINT_new(group), ec_point_deleter);
+    if (!pub_point) {
+        throw std::runtime_error("Failed to create public key point.");
+    }
+
+    if (EC_POINT_mul(group, pub_point.get(), bn_private_key.get(), nullptr, nullptr, nullptr) != 1) {
         throw std::runtime_error("Failed to calculate public key point.");
     }
-    if (EC_KEY_set_public_key(ec_key, pub_point) != 1) {
-        BN_free(bn_private_key);
-        EC_KEY_free(ec_key);
-        EC_POINT_free(pub_point);
+
+    if (EC_KEY_set_public_key(ec_key.get(), pub_point.get()) != 1) {
         throw std::runtime_error("Failed to set public key.");
     }
 
-    // --- 步骤 2: 执行签名 ---
-
-    // ECDSA_do_sign 会对传入的哈希（hash_to_sign）进行签名
-    // 结果是一个 ECDSA_SIG 结构体，其中包含 r 和 s 两个大数值
-    ECDSA_SIG* signature = ECDSA_do_sign(
-        reinterpret_cast<const unsigned char*>(hash_to_sign.c_str()),
-        hash_to_sign.length(),
-        ec_key
+    // --- Step 2: Perform signing ---
+    std::unique_ptr<ECDSA_SIG, decltype(ecdsa_sig_deleter)> signature(
+        ECDSA_do_sign(reinterpret_cast<const unsigned char*>(hash_to_sign.c_str()), hash_to_sign.length(), ec_key.get()),
+        ecdsa_sig_deleter
     );
-    if (signature == nullptr) {
-        BN_free(bn_private_key);
-        EC_KEY_free(ec_key);
-        EC_POINT_free(pub_point);
+    if (!signature) {
         throw std::runtime_error("Failed to generate ECDSA signature.");
     }
 
-
-    // --- 步骤 3: 将签名序列化为DER编码的字符串 ---
-
-    // 获取DER编码后签名所需的最大缓冲区大小
-    int der_sig_len = i2d_ECDSA_SIG(signature, nullptr);
+    // --- Step 3: Serialize the signature into a DER-encoded string ---
+    int der_sig_len = i2d_ECDSA_SIG(signature.get(), nullptr);
     if (der_sig_len <= 0) {
-        BN_free(bn_private_key);
-        EC_KEY_free(ec_key);
-        EC_POINT_free(pub_point);
-        ECDSA_SIG_free(signature);
         throw std::runtime_error("Failed to determine DER signature length.");
     }
 
-    // 创建一个足够大的vector来存放DER编码的签名
     std::vector<unsigned char> der_signature(der_sig_len);
-    unsigned char* p = der_signature.data(); // 获取vector缓冲区的裸指针
+    unsigned char* p = der_signature.data();
 
-    // i2d_ECDSA_SIG 再次调用，这次它会将编码后的数据写入我们提供的缓冲区
-    if (i2d_ECDSA_SIG(signature, &p) <= 0) {
-        BN_free(bn_private_key);
-        EC_KEY_free(ec_key);
-        EC_POINT_free(pub_point);
-        ECDSA_SIG_free(signature);
+    if (i2d_ECDSA_SIG(signature.get(), &p) <= 0) {
         throw std::runtime_error("Failed to DER encode signature.");
     }
-    
-    // 将vector中的二进制数据转换为std::string
-    std::string final_signature(der_signature.begin(), der_signature.end());
 
-
-    // --- 步骤 4: 清理所有手动分配的OpenSSL对象，防止内存泄漏 ---
-    BN_free(bn_private_key);
-    EC_KEY_free(ec_key);
-    EC_POINT_free(pub_point);
-    ECDSA_SIG_free(signature);
-
-    // --- 步骤 5: 返回最终的签名字符串 ---
-    return final_signature;
+    return std::string(der_signature.begin(), der_signature.end());
 }
 
 std::string serialize_2(const std::vector<Input> &inputs,const std::vector<Output> &outputs){
@@ -127,52 +96,50 @@ std::string serialize_2(const std::vector<Input> &inputs,const std::vector<Outpu
 }
 
 Transaction User::transfer(const std::string &address,const uint64_t &amount)const{
-    size_t deposit=0;
     if( address.length()!=64||!hex_verify(address)||amount<=0){
         throw std::invalid_argument("Invalid input");
     }
-    //找出交易所需要的UTXO的逻辑
-    std::vector<UTXO>my_utxos;
-    for(auto &utxo:blockchain_ref.utxo_set){
-        if(utxo.second.address==this->wallet_address){
-            my_utxos.push_back(utxo.second);//获取UTXO
-            deposit+=utxo.second.amount;
+
+    // Logic to find the UTXOs needed for the transaction
+    uint64_t deposit=0;
+    std::vector<UTXO> my_utxos;
+    for(const auto &utxo_pair:blockchain_ref.utxo_set){
+        if(utxo_pair.second.address==this->wallet_address){
+            my_utxos.push_back(utxo_pair.second); // Get UTXO
+            deposit+=utxo_pair.second.amount;
             if(deposit>=amount){
                 break;
             }
         }
     }
+
     if(deposit<amount){
         throw std::runtime_error("Insufficient funds.");
     }
 
     std::vector<Input> inputs;
     std::vector<Output> outputs;
-    for(auto &utxo:my_utxos){
-        Input input;
-        input.index= utxo.index;
-        input.txid=utxo.txid;
-        input.public_key ;
-        input.signature ;
-        inputs.push_back(input);
+
+    // Create outputs
+    outputs.push_back(Output{amount, address});
+    if(deposit>amount){
+        outputs.push_back(Output{deposit - amount, this->wallet_address});
+    }
+
+    // Create a temporary list of inputs without signatures to generate the hash
+    for(const auto &utxo:my_utxos){
+        inputs.push_back(Input{utxo.txid, utxo.index, "", ""});
+    }
+
+    // Sign the transaction hash
+    std::string hash_to_sign = sha256(serialize_2(inputs, outputs));
+    std::string signature = sign(hash_to_sign);
+
+    // Add signature and public key to all inputs
+    for(auto &input:inputs){
+        input.signature = signature;
+        input.public_key = this->public_key;
     }
     
-    Output output1;
-    output1.address =address;
-    output1.amount =amount;
-    outputs.push_back(output1);
-    if(deposit>amount){
-        Output output2;
-        output2.address =this->wallet_address;
-        output2.amount = deposit -amount;
-        outputs.push_back(output2);
-    }
-    std::string hash_to_sign =sha256(serialize_2(inputs, outputs));
-    std::string signature =sign(hash_to_sign);
-    for(auto &input:inputs){
-        input.signature =signature;
-        input.public_key=this->public_key;
-    }
-    Transaction new_deal =Transaction(inputs,outputs);
-    return new_deal;
-};
+    return Transaction(inputs,outputs);
+}
