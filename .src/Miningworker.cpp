@@ -30,7 +30,7 @@ void Miningworker::run() {
 
         {
             std::unique_lock<std::mutex> lock(pool_mutex_ref);
-            cv_ref.wait(lock, [this] { return transaction_pool_ref.size() >= 8; });
+            cv_ref.wait(lock, [this] { return !transaction_pool_ref.empty(); });
 
             // Take a snapshot of the transactions to avoid holding the lock for too long
             std::vector<Transaction> current_pool_snapshot = transaction_pool_ref;

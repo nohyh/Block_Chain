@@ -1,6 +1,6 @@
 #include"Transaction.h"
 Transaction::Transaction(std::vector<Input> inputs,std::vector<Output> outputs):inputs(inputs),outputs(outputs){
-    this->txid = sha256(this->serialize());
+    this->txid = convert_2_16(sha256(this->serialize()));
 };
 
 

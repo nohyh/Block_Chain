@@ -1,18 +1,18 @@
-
 #include "Hash.h"
 #include <openssl/sha.h>
 #include <openssl/ripemd.h>
 #include <sstream>
 #include <iomanip>
-#include <openssl/ec.h>      // Core library for elliptic curve cryptography
-#include <openssl/obj_mac.h> // Contains the curve ID (NID_secp256k1)
-#include <openssl/rand.h>  // For generating secure random numbers
-#include <openssl/ecdsa.h>   
-#include <openssl/bn.h>      // For big number arithmetic
-#include <memory>            // For smart pointers std::unique_ptr
+#include <openssl/ec.h>
+#include <openssl/obj_mac.h>
+#include <openssl/rand.h>
+#include <openssl/ecdsa.h>
+#include <openssl/bn.h>
+#include <memory>
 #include <vector>
 #include <string>
 #include "Transform.h"
+
 // Used to convert the unsigned char data returned by SHA256 into a string
 std::string sha256(const std::string& data) {
     unsigned char hash_buffer[SHA256_DIGEST_LENGTH];

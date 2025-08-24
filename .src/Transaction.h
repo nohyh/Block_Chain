@@ -6,7 +6,6 @@
 #include<sstream>
 #include<Transform.h>
 #include "Hash.h" 
-
 struct Output{
     uint64_t amount;
     std::string address;

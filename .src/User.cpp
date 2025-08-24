@@ -96,7 +96,7 @@ std::string serialize_2(const std::vector<Input> &inputs,const std::vector<Outpu
 }
 
 Transaction User::transfer(const std::string &address,const uint64_t &amount)const{
-    if( address.length()!=64||!hex_verify(address)||amount<=0){
+    if(amount<=0){
         throw std::invalid_argument("Invalid input");
     }
 

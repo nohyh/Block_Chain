@@ -1,4 +1,3 @@
-
 #ifndef HASH_H
 #define HASH_H
 
@@ -10,7 +9,7 @@ std::string ripemd160(const std::string& str);
 struct KeyPair {
     std::string private_key_bin; // 32byte
     std::string public_key_bin;  // 65byte
-    std::string wallet_address_hex; // 64byte
+    std::string wallet_address_hex; // Base58 encoded address
 };
 
 KeyPair generate_keys();

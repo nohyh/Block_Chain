@@ -18,7 +18,7 @@ std::string Miner::calculate_merkel_root(const std::vector<Transaction> &mempool
         }
         hash_list =next_list;
     }
-    return hash_list[0];
+    return convert_2_16(hash_list[0]);
 };
 
 Block Miner::create_block() {

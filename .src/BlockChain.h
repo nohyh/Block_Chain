@@ -27,6 +27,7 @@ public:
     BlockChain(const std::string creator_address);
     void update_transaction_pool(std::vector<Transaction>& pool,const Block& new_block);
     uint64_t get_balance(const std::string &address) const;
+    bool add_transaction_to_pool(const Transaction& tx, std::vector<Transaction>& transaction_pool);
     void print_block(const Block&new_block)const;
 };
 

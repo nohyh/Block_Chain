@@ -7,7 +7,8 @@
 #include"Miningworker.h"
 #include "Transform.h"
 
-void auto_trade(std::vector<User>& users, std::vector<Transaction>& transaction_pool, std::mutex& pool_mutex, BlockChain& blockchain, std::condition_variable& cv);
+// Forward declaration with the new signature including chain_mutex
+void auto_trade(std::vector<User>& users, std::vector<Transaction>& transaction_pool, std::mutex& pool_mutex, std::mutex& chain_mutex, BlockChain& blockchain, std::condition_variable& cv);
 
 int main() {
     std::cout << "Blockchain system starting..." << std::endl;
@@ -52,7 +53,8 @@ int main() {
         users.emplace_back(keys.wallet_address_hex,keys.private_key_bin,keys.public_key_bin,blockchain);
     }
 
-    std::thread trading_thread(auto_trade, std::ref(users), std::ref(Transaction_pool), std::ref(pool_mtx), std::ref(blockchain), std::ref(cv));
+    // Pass chain_mtx to the trading_thread
+    std::thread trading_thread(auto_trade, std::ref(users), std::ref(Transaction_pool), std::ref(pool_mtx), std::ref(chain_mtx), std::ref(blockchain), std::ref(cv));
     
     // Wait for the threads to complete before continuing (in practice, it will loop forever)
     trading_thread.join();
@@ -62,45 +64,56 @@ int main() {
 
 }
 
-void auto_trade(std::vector<User>& users,std::vector<Transaction>& transaction_pool,std::mutex& pool_mutex,BlockChain& blockchain, std::condition_variable& cv){
+// auto_trade implementation with the new signature
+void auto_trade(std::vector<User>& users, std::vector<Transaction>& transaction_pool, std::mutex& pool_mutex, std::mutex& chain_mutex, BlockChain& blockchain, std::condition_variable& cv){
     std::random_device rd;  
     std::mt19937 gen(rd()); 
     std::vector<int> indices ; // This is an array of indices for users who have money
     indices.push_back(0);
     
     while(true){
-        // First, find a payer from among the users with money
-        std::uniform_int_distribution<> dist(0,indices.size()-1);
-        int sender_index =indices[dist(gen)];
-        User& sender = users[sender_index];
-        uint64_t balance=blockchain.get_balance(sender.wallet_address);
-        if(balance==0) continue;
+        {
+            // Lock chain first, then pool, to prevent deadlock and data races on utxo_set
+            std::lock_guard<std::mutex> chain_lock(chain_mutex);
+            std::lock_guard<std::mutex> pool_lock(pool_mutex);
 
-        // Then, find a recipient
-        std::uniform_int_distribution<> receiver_dist(0,users.size()-1);
-        int receiver_index =receiver_dist(gen);
-        User &receiver =users[receiver_index];
-        if(receiver.wallet_address==sender.wallet_address) continue;
+            std::uniform_int_distribution<> dist(0,indices.size()-1);
+            int sender_index =indices[dist(gen)];
+            User& sender = users[sender_index];
+            
+            uint64_t balance = blockchain.get_balance(sender.wallet_address);
+            if(balance > 0) {
+                std::uniform_int_distribution<> receiver_dist(0,users.size()-1);
+                int receiver_index = receiver_dist(gen);
+                User &receiver = users[receiver_index];
 
-        // Confirm the amount
-        std::uniform_int_distribution<uint64_t> amount_dist(1,balance);
-        uint64_t amount =amount_dist(gen);
+                if(receiver.wallet_address != sender.wallet_address) {
+                    std::uniform_int_distribution<uint64_t> amount_dist(1,balance);
+                    uint64_t amount = amount_dist(gen);
 
-        // Start the transfer
-        try {
-            Transaction tr = sender.transfer(receiver.wallet_address, amount);
-            {
-                std::lock_guard<std::mutex> lock(pool_mutex);
-                transaction_pool.push_back(tr);
+                    try {
+                        Transaction tr = sender.transfer(receiver.wallet_address, amount);
+                        bool success = blockchain.add_transaction_to_pool(tr, transaction_pool);
+
+                        if (success) {
+                            cv.notify_all();
+                            if (std::find(indices.begin(), indices.end(), receiver_index) == indices.end()) {
+                                indices.push_back(receiver_index);
+                            }
+                            std::cout << "\n[+] New Valid Transaction Added to Pool" << std::endl;
+                            //std::cout << "    - Sender:   " << sender.wallet_address << std::endl;
+                            //std::cout << "    - Receiver: " << receiver.wallet_address << std::endl;
+                            //std::cout << "    - Amount:   " << format_amount(amount) << " NOCOIN" << std::endl;
+                            std::cout<<sender.wallet_address<<"  send  "<<format_amount(amount) <<" NOCOIN  TO   "<<receiver.wallet_address<<std::endl;
+                        } 
+                    }
+                    catch (const std::exception &e) {
+                        // This case should be rare now but is kept for safety
+                    }
+                }
             }
-            cv.notify_all(); // Wake up all waiting miner threads
-            if (std::find(indices.begin(), indices.end(), receiver_index) == indices.end()) {
-                indices.push_back(receiver_index);
-            }
-        }
-        catch (const std::exception &e) {
-        }
-        std::cout << sender.wallet_address << " Transfer " << format_amount(amount) << " To " << receiver.wallet_address << std::endl;
+        } // All locks are released here
+
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 }
