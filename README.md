@@ -10,9 +10,9 @@
 
 ---
 
-### ⚠️ Project Status: Work in Progress
+### 🎉 Project Status: Completed (v1.0)
 
-**Please note:** This project is currently under active development. It is intended for educational purposes to explore blockchain fundamentals. The code is still being modified and debugged, and may contain errors or incomplete features.
+This project is now feature-complete and has been successfully tested. It serves as a functional demonstration of core blockchain concepts and was developed as an educational exercise. While it is complete, it is intended for learning purposes and may not be production-ready.
 
 ---
 
@@ -35,7 +35,7 @@
 
 ### 1. Prerequisites
 
-Ensure you have a C++20 compatible compiler, CMake, and OpenSSL development libraries installed.
+Ensure you have a C++20 compatible compiler, CMake (version 3.15 or higher), and OpenSSL development libraries installed.
 
 **On Ubuntu/Debian:**
 ```bash
@@ -50,7 +50,7 @@ brew install cmake openssl
 
 ```bash
 # Clone the repository
-git clone [https://github.com/nohyh/Block_Chain.git](https://github.com/nohyh/Block_Chain.git)
+git clone https://github.com/nohyh/Block_Chain.git
 cd Block_Chain
 
 # Create build directory and compile
